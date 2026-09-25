@@ -1,193 +1,283 @@
 import streamlit as st
-import torch
-import timm
-from torchvision import transforms
+import tensorflow as tf
+import numpy as np
 from PIL import Image
+import os
 
-# -----------------------------------------
-# 1. Page configuration
-# -----------------------------------------
+
+# =========================================================
+# 1. PAGE CONFIGURATION
+# =========================================================
 
 st.set_page_config(
-    page_title="Cat vs Dog - ViT",
+    page_title="Cat vs Dog - CNN",
     page_icon="🐱",
     layout="centered"
 )
 
 st.title("🐱🐶 Cat vs Dog Image Classification")
-st.write("Vision Transformer (ViT) + PyTorch")
+st.write("Convolutional Neural Network (CNN) + TensorFlow/Keras")
 
-# -----------------------------------------
-# 2. Device
-# -----------------------------------------
 
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
-)
+# =========================================================
+# 2. MODEL PATH
+# =========================================================
 
-st.info(f"Running on: {device}")
+MODEL_PATH = "cat_dog_small.keras"
 
-# -----------------------------------------
-# 3. Classes
-# -----------------------------------------
 
-class_names = ["cats", "dogs"]
+# =========================================================
+# 3. CHECK MODEL
+# =========================================================
 
-# -----------------------------------------
-# 4. Load ViT model
-# -----------------------------------------
+if not os.path.exists(MODEL_PATH):
+
+    st.error(
+        "❌ Model not found: cat_dog_small.keras"
+    )
+
+    st.info(
+        "Please place cat_dog_small.keras "
+        "in the same folder as app.py"
+    )
+
+    st.stop()
+
+
+# =========================================================
+# 4. LOAD CNN MODEL
+# =========================================================
 
 @st.cache_resource
 def load_model():
 
-    model = timm.create_model(
-        "vit_base_patch16_224",
-        pretrained=False,
-        num_classes=2
+    model = tf.keras.models.load_model(
+        MODEL_PATH
     )
-
-    checkpoint = torch.load(
-        "best_vit_cat_dog.pth",
-        map_location=device
-    )
-
-    # Handle checkpoint format
-    if isinstance(checkpoint, dict):
-
-        if "model_state_dict" in checkpoint:
-            state_dict = checkpoint["model_state_dict"]
-
-        elif "state_dict" in checkpoint:
-            state_dict = checkpoint["state_dict"]
-
-        else:
-            state_dict = checkpoint
-
-    else:
-        state_dict = checkpoint
-
-    # Remove module. prefix if present
-    state_dict = {
-        k.replace("module.", ""): v
-        for k, v in state_dict.items()
-    }
-
-    model.load_state_dict(state_dict)
-
-    model.to(device)
-    model.eval()
 
     return model
 
 
 model = load_model()
 
-# -----------------------------------------
-# 5. Image preprocessing
-# -----------------------------------------
 
-transform = transforms.Compose([
+# =========================================================
+# 5. CLASSES
+# =========================================================
 
-    transforms.Resize((224, 224)),
+class_names = [
+    "cats",
+    "dogs"
+]
 
-    transforms.ToTensor(),
 
-    transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225]
-    )
-])
+# =========================================================
+# 6. MODEL INFORMATION
+# =========================================================
 
-# -----------------------------------------
-# 6. Upload image
-# -----------------------------------------
+st.info(
+    "🧠 Model: Small CNN | Input: 128 × 128"
+)
+
+
+# =========================================================
+# 7. IMAGE UPLOAD
+# =========================================================
 
 uploaded_file = st.file_uploader(
     "Upload a Cat or Dog image",
-    type=["jpg", "jpeg", "png"]
+    type=[
+        "jpg",
+        "jpeg",
+        "png"
+    ]
 )
 
-# -----------------------------------------
-# 7. Prediction
-# -----------------------------------------
+
+# =========================================================
+# 8. PREDICTION
+# =========================================================
 
 if uploaded_file is not None:
+
+    # -----------------------------------------
+    # Open image
+    # -----------------------------------------
 
     image = Image.open(
         uploaded_file
     ).convert("RGB")
 
+
+    # -----------------------------------------
+    # Display image
+    # -----------------------------------------
+
     st.image(
         image,
         caption="Uploaded Image",
-        use_container_width=True
+        width=400
     )
 
-    # Convert image
-    image_tensor = transform(image)
 
+    # -----------------------------------------
+    # Resize image
+    # -----------------------------------------
+
+    resized_image = image.resize(
+        (128, 128)
+    )
+
+
+    # -----------------------------------------
+    # Convert to NumPy
+    # -----------------------------------------
+
+    image_array = np.array(
+        resized_image
+    )
+
+
+    # -----------------------------------------
+    # Normalize
+    # -----------------------------------------
+
+    image_array = (
+        image_array / 255.0
+    )
+
+
+    # -----------------------------------------
     # Add batch dimension
-    image_tensor = image_tensor.unsqueeze(0)
+    # -----------------------------------------
 
-    # Move to GPU/CPU
-    image_tensor = image_tensor.to(device)
+    image_array = np.expand_dims(
+        image_array,
+        axis=0
+    )
 
-    # Prediction
-    with torch.no_grad():
 
-        output = model(image_tensor)
+    # =====================================================
+    # 9. CNN PREDICTION
+    # =====================================================
 
-        probabilities = torch.softmax(
-            output,
-            dim=1
-        )
+    prediction = model.predict(
+        image_array,
+        verbose=0
+    )[0][0]
 
-        confidence, predicted = torch.max(
-            probabilities,
-            dim=1
-        )
 
-    predicted_class = class_names[
-        predicted.item()
-    ]
+    # =====================================================
+    # 10. CLASSIFICATION
+    # =====================================================
+
+    if prediction >= 0.5:
+
+        predicted_class = "dogs"
+
+        confidence = prediction
+
+    else:
+
+        predicted_class = "cats"
+
+        confidence = 1 - prediction
+
 
     confidence_value = (
-        confidence.item() * 100
+        confidence * 100
     )
 
-    # -----------------------------------------
-    # 8. Display result
-    # -----------------------------------------
+
+    # =====================================================
+    # 11. DISPLAY RESULT
+    # =====================================================
 
     st.success(
         f"Prediction: {predicted_class.upper()}"
     )
+
 
     st.metric(
         "Confidence",
         f"{confidence_value:.2f}%"
     )
 
-    # -----------------------------------------
-    # 9. Probability
-    # -----------------------------------------
+
+    # =====================================================
+    # 12. PREDICTION PROBABILITIES
+    # =====================================================
 
     st.subheader(
-        "Prediction Probabilities"
+        "📊 Prediction Probabilities"
     )
 
-    for i, class_name in enumerate(
-        class_names
-    ):
 
-        probability = (
-            probabilities[0][i].item() * 100
+    cat_probability = (
+        (1 - prediction) * 100
+    )
+
+    dog_probability = (
+        prediction * 100
+    )
+
+
+    # -----------------------------------------
+    # Cat
+    # -----------------------------------------
+
+    st.write(
+        f"🐱 Cats: {cat_probability:.2f}%"
+    )
+
+    st.progress(
+        int(cat_probability)
+    )
+
+
+    # -----------------------------------------
+    # Dog
+    # -----------------------------------------
+
+    st.write(
+        f"🐶 Dogs: {dog_probability:.2f}%"
+    )
+
+    st.progress(
+        int(dog_probability)
+    )
+
+
+    # =====================================================
+    # 13. INTERPRETATION
+    # =====================================================
+
+    if confidence_value >= 90:
+
+        st.success(
+            "🎯 Very high confidence prediction!"
         )
 
-        st.write(
-            f"{class_name}: {probability:.2f}%"
+    elif confidence_value >= 70:
+
+        st.info(
+            "👍 Good confidence prediction."
         )
 
-        st.progress(
-            int(probability)
+    else:
+
+        st.warning(
+            "⚠️ The model is not very confident. "
+            "Try a clearer image."
         )
+
+
+# =========================================================
+# 14. FOOTER
+# =========================================================
+
+st.markdown("---")
+
+st.caption(
+    "🧠 Small CNN • TensorFlow/Keras • Streamlit"
+)
