@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 from pathlib import Path
 
+
 # =========================================================
 # 1. PAGE CONFIGURATION
 # =========================================================
@@ -22,14 +23,14 @@ st.write("Convolutional Neural Network (CNN) + TensorFlow/Keras")
 # 2. MODEL PATH
 # =========================================================
 
-MODEL_PATH = "cat_dog_small.keras"
+MODEL_PATH = Path(__file__).parent / "cat_dog_small.keras"
 
 
 # =========================================================
 # 3. CHECK MODEL
 # =========================================================
 
-if not os.path.exists(MODEL_PATH):
+if not MODEL_PATH.exists():
 
     st.error(
         "❌ Model not found: cat_dog_small.keras"
@@ -37,7 +38,7 @@ if not os.path.exists(MODEL_PATH):
 
     st.info(
         "Please place cat_dog_small.keras "
-        "in the same folder as app.py"
+        "in the same folder as app1.py"
     )
 
     st.stop()
